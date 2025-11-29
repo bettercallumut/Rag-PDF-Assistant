@@ -1,0 +1,17 @@
+.env
+__pycache__/
+*.pyc
+*.mp3
+*.tmp
+_backup/
+.chroma/
+chroma_db/
+*.log
+.DS_Store
+Thumbs.db
+*.egg-info/
+dist/
+build/
+.idea/
+.vscode/
+*.sqlite3
