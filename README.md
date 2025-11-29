@@ -168,7 +168,7 @@ Pull requests are welcome! / Pull request'ler kabul edilir!
 
 ## 👤 Author / Geliştirici
 
-**Umut Deniz**
+**Samet Yıldız**
 
 ---
 
