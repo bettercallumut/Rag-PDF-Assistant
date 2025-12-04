@@ -1,11 +1,13 @@
 import sys
 import os
+import subprocess
+import socket
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QTextEdit, QLineEdit, QPushButton, 
                              QLabel, QProgressBar, QFileDialog, QFrame, QCheckBox,
                              QDialog, QDialogButtonBox)
 from PyQt6.QtCore import Qt, QTimer, QUrl
-from PyQt6.QtGui import QFont
+from PyQt6.QtGui import QFont, QIcon, QColor, QPalette
 from PyQt6.QtMultimedia import QMediaPlayer, QAudioOutput
 
 import config
@@ -16,49 +18,142 @@ from audio_visualizer import SpeakingVisualizer
 from dialogs import StyledMessageBox
 from updater import check_for_updates, GITHUB_REPO
 
+def is_android():
+    # Android platform kontrolü (Termux veya Pydroid3)
+    return "ANDROID_ARGUMENT" in os.environ or hasattr(sys, 'getandroidapilevel')
+
+def launch_web_ui():
+    """Streamlit web arayüzünü başlatır."""
+    try:
+        # Donmuş (Frozen) uygulamada (EXE), streamlit'i CLI üzerinden doğrudan çalıştırmak gerekir.
+        if getattr(sys, 'frozen', False):
+            # EXE modu: Streamlit'i bir process olarak başlatmak zordur çünkü sys.executable
+            # python interpreter değil, exe'nin kendisidir.
+            # Bu yüzden en güvenli yöntem, kullanıcıyı bilgilendirmek veya
+            # streamlit'in main fonksiyonunu multiprocessing ile çağırmaktır.
+            # Ancak PyQt thread'i içinde streamlit.run() çağırmak arayüzü dondurur.
+            # Çözüm: Ayrı bir process içinde streamlit.web.cli.main() çağırmak.
+
+            import multiprocessing
+            p = multiprocessing.Process(target=run_streamlit_server)
+            p.start()
+            return True
+        else:
+            # Kaynak kod (Geliştirme) modu
+            cmd = [sys.executable, "-m", "streamlit", "run", "web_app.py"]
+            subprocess.Popen(cmd)
+            return True
+    except Exception as e:
+        print(f"Web UI başlatılamadı: {e}")
+        return False
+
+def run_streamlit_server():
+    """Frozen app içinde streamlit sunucusunu başlatır."""
+    try:
+        # sys.argv manipülasyonu gerekli çünkü streamlit argümanları sys.argv'den okur
+        sys.argv = ["streamlit", "run", os.path.join(sys._MEIPASS, "web_app.py"), "--server.headless=true"]
+        from streamlit.web import cli
+        cli.main()
+    except Exception as e:
+        print(f"Streamlit Server Hatası: {e}")
+
+class WebConnectDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("Mobil Bağlantı")
+        self.setModal(True)
+        self.setMinimumWidth(400)
+        self.setStyleSheet(f"""
+            QDialog {{ background-color: {config.COLOR_BG}; border: 1px solid {config.COLOR_BORDER}; }}
+            QLabel {{ color: {config.COLOR_TEXT}; font-size: 14px; }}
+            QPushButton {{
+                background-color: {config.COLOR_ACCENT};
+                color: white;
+                border: none;
+                padding: 10px 25px;
+                border-radius: 8px;
+                font-weight: 600;
+            }}
+        """)
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(20)
+        layout.setContentsMargins(30, 30, 30, 30)
+
+        title = QLabel("Mobilden Bağlan")
+        title.setStyleSheet("font-weight: bold; font-size: 18px;")
+        layout.addWidget(title)
+
+        # IP Adresi Bulma
+        hostname = socket.gethostname()
+        try:
+            ip_address = socket.gethostbyname(hostname)
+        except:
+            ip_address = "localhost"
+
+        info = QLabel(f"Web sunucusu başlatıldı.\n\nTelefonunuzun tarayıcısından aşağıdaki adrese gidin:\n\nhttp://{ip_address}:8501")
+        info.setWordWrap(True)
+        layout.addWidget(info)
+
+        btn_close = QPushButton("Kapat")
+        btn_close.clicked.connect(self.accept)
+        layout.addWidget(btn_close)
+
 class ApiKeyDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("API Anahtarı Gerekli")
+        self.setWindowTitle("Neural Core - API Girişi")
         self.setModal(True)
         self.setMinimumWidth(450)
-        self.setStyleSheet("""
-            QDialog { background-color: #1E1E1E; }
-            QLabel { color: #E0E0E0; font-size: 14px; }
-            QLineEdit { 
-                background-color: #2A2A2A; 
-                border: 2px solid #444; 
-                padding: 10px; 
-                border-radius: 6px; 
-                color: white; 
+        self.setStyleSheet(f"""
+            QDialog {{ background-color: {config.COLOR_BG}; }}
+            QLabel {{ color: {config.COLOR_TEXT}; font-size: 14px; }}
+            QLineEdit {{
+                background-color: {config.COLOR_INPUT_BG};
+                border: 1px solid {config.COLOR_BORDER};
+                padding: 12px;
+                border-radius: 8px;
+                color: {config.COLOR_TEXT};
                 font-size: 13px;
-            }
-            QLineEdit:focus { border: 2px solid #00CED1; }
-            QPushButton {
-                background-color: #00CED1;
-                color: #121212;
+            }}
+            QLineEdit:focus {{ border: 1px solid {config.COLOR_ACCENT}; }}
+            QPushButton {{
+                background-color: {config.COLOR_ACCENT};
+                color: white;
                 border: none;
                 padding: 10px 25px;
-                border-radius: 6px;
-                font-weight: bold;
-            }
-            QPushButton:hover { background-color: #20B2AA; }
-            QPushButton:disabled { background-color: #333; color: #666; }
+                border-radius: 8px;
+                font-weight: 600;
+                font-size: 13px;
+            }}
+            QPushButton:hover {{ background-color: {config.COLOR_ACCENT_HOVER}; }}
+            QPushButton:disabled {{ background-color: {config.COLOR_PANEL}; color: {config.COLOR_TEXT_DIM}; }}
         """)
         layout = QVBoxLayout(self)
-        layout.setSpacing(15)
-        layout.setContentsMargins(25, 25, 25, 25)
-        lbl = QLabel("Lütfen OpenAI API anahtarınızı girin:")
+        layout.setSpacing(20)
+        layout.setContentsMargins(30, 30, 30, 30)
+
+        lbl = QLabel("OpenAI API Anahtarı")
+        lbl.setStyleSheet(f"color: {config.COLOR_TEXT}; font-weight: bold; font-size: 16px;")
         layout.addWidget(lbl)
+
+        lbl_desc = QLabel("Asistanın çalışması için geçerli bir OpenAI API anahtarı gereklidir.")
+        lbl_desc.setStyleSheet(f"color: {config.COLOR_TEXT_DIM}; font-size: 12px;")
+        lbl_desc.setWordWrap(True)
+        layout.addWidget(lbl_desc)
+
         self.input = QLineEdit()
         self.input.setPlaceholderText("sk-...")
         self.input.setEchoMode(QLineEdit.EchoMode.Password)
         self.input.textChanged.connect(self.validate)
         layout.addWidget(self.input)
+
         self.status_lbl = QLabel("")
-        self.status_lbl.setStyleSheet("color: #888;")
+        self.status_lbl.setStyleSheet(f"color: {config.COLOR_TEXT_DIM}; font-size: 12px;")
         layout.addWidget(self.status_lbl)
-        self.btn_save = QPushButton("Kaydet ve Başlat")
+
+        self.btn_save = QPushButton("Doğrula ve Başlat")
+        self.btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_save.setEnabled(False)
         self.btn_save.clicked.connect(self.save_key)
         layout.addWidget(self.btn_save)
@@ -73,23 +168,28 @@ class ApiKeyDialog(QDialog):
 
     def save_key(self):
         key = self.input.text().strip()
-        self.status_lbl.setText("Test ediliyor...")
-        self.status_lbl.setStyleSheet("color: #FFA500;")
+        self.status_lbl.setText("API anahtarı doğrulanıyor...")
+        self.status_lbl.setStyleSheet(f"color: {config.COLOR_USER_MSG};")
+        self.input.setEnabled(False)
+        self.btn_save.setEnabled(False)
         QApplication.processEvents()
+
         if config.test_api_key(key):
             config.save_api_key(key)
-            self.status_lbl.setText("Başarılı!")
-            self.status_lbl.setStyleSheet("color: #00E676;")
-            QTimer.singleShot(500, self.accept)
+            self.status_lbl.setText("Başarılı! Başlatılıyor...")
+            self.status_lbl.setStyleSheet(f"color: {config.COLOR_AI_MSG};")
+            QTimer.singleShot(800, self.accept)
         else:
-            self.status_lbl.setText("Geçersiz API anahtarı!")
-            self.status_lbl.setStyleSheet("color: #FF5252;")
+            self.status_lbl.setText("Geçersiz API anahtarı! Lütfen kontrol edin.")
+            self.status_lbl.setStyleSheet(f"color: {config.COLOR_ERROR};")
+            self.input.setEnabled(True)
+            self.btn_save.setEnabled(True)
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("AI Asistan - Neural Core")
-        self.resize(600, 850)
+        self.setWindowTitle("Neural Core AI")
+        self.resize(1000, 800)
         self.rag_system = None
         self.tts_enabled = True
         self.current_audio_file = None
@@ -111,142 +211,266 @@ class MainWindow(QMainWindow):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
+        # Global Stylesheet
         self.setStyleSheet(f"""
             QMainWindow {{ background-color: {config.COLOR_BG}; }}
-            QWidget {{ font-family: 'Segoe UI'; font-size: 14px; color: {config.COLOR_TEXT}; }}
-            QTextEdit {{ background-color: {config.COLOR_PANEL}; border: none; padding: 10px; }}
+            QWidget {{ font-family: 'Segoe UI', sans-serif; font-size: 14px; color: {config.COLOR_TEXT}; }}
+
+            /* Scrollbar Styling */
+            QScrollBar:vertical {{
+                border: none;
+                background: {config.COLOR_BG};
+                width: 8px;
+                margin: 0px;
+            }}
+            QScrollBar::handle:vertical {{
+                background: {config.COLOR_BORDER};
+                min-height: 20px;
+                border-radius: 4px;
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                height: 0px;
+            }}
+
+            QTextEdit {{
+                background-color: {config.COLOR_BG};
+                border: none;
+                padding: 15px;
+                selection-background-color: {config.COLOR_ACCENT};
+            }}
+
             QLineEdit {{ 
-                background-color: #2A2A2A; 
-                border: 2px solid #444; 
-                padding: 10px; 
-                border-radius: 6px; 
-                color: white; 
+                background-color: {config.COLOR_INPUT_BG};
+                border: 1px solid {config.COLOR_BORDER};
+                padding: 12px;
+                border-radius: 8px;
+                color: {config.COLOR_TEXT};
                 font-size: 14px;
             }}
             QLineEdit:focus {{
-                border: 2px solid #00CED1;
+                border: 1px solid {config.COLOR_ACCENT};
             }}
+
             QPushButton {{ 
                 background-color: {config.COLOR_ACCENT}; 
                 color: white; 
-                border: 2px solid {config.COLOR_ACCENT}; 
+                border: none;
                 padding: 10px 20px; 
-                border-radius: 6px; 
-                font-weight: bold; 
+                border-radius: 8px;
+                font-weight: 600;
             }}
             QPushButton:hover {{ 
                 background-color: {config.COLOR_ACCENT_HOVER}; 
-                border: 2px solid {config.COLOR_ACCENT_HOVER};
             }}
             QPushButton:disabled {{ 
-                background-color: #333; 
-                color: #666; 
-                border: 2px solid #444;
+                background-color: {config.COLOR_PANEL};
+                color: {config.COLOR_TEXT_DIM};
             }}
+
             QProgressBar {{ 
                 border: none; 
                 background-color: {config.COLOR_PANEL}; 
                 height: 4px; 
             }}
-            QProgressBar::chunk {{ background-color: #00CED1; }}
+            QProgressBar::chunk {{ background-color: {config.COLOR_ACCENT}; }}
+
             QCheckBox {{
-                color: {config.COLOR_TEXT};
+                color: {config.COLOR_TEXT_DIM};
                 spacing: 8px;
             }}
             QCheckBox::indicator {{
-                width: 20px;
-                height: 20px;
+                width: 18px;
+                height: 18px;
                 border-radius: 4px;
-                border: 2px solid #FF1744;
-                background-color: #FF1744;
+                border: 1px solid {config.COLOR_BORDER};
+                background-color: {config.COLOR_INPUT_BG};
             }}
             QCheckBox::indicator:checked {{
-                border: 2px solid #00E676;
-                background-color: #00E676;
+                border: 1px solid {config.COLOR_ACCENT};
+                background-color: {config.COLOR_ACCENT};
             }}
         """)
 
+        # --- Top Header ---
         top_panel = QFrame()
-        top_panel.setStyleSheet(f"background-color: {config.COLOR_PANEL}; border-bottom: 1px solid #333;")
+        top_panel.setStyleSheet(f"background-color: {config.COLOR_PANEL}; border-bottom: 1px solid {config.COLOR_BORDER};")
+        top_panel.setFixedHeight(60)
         top_layout = QHBoxLayout(top_panel)
+        top_layout.setContentsMargins(20, 0, 20, 0)
+
+        app_title = QLabel("Neural Core")
+        app_title.setStyleSheet(f"font-weight: bold; font-size: 16px; color: {config.COLOR_TEXT};")
+        top_layout.addWidget(app_title)
+
         self.lbl_status = QLabel("Başlatılıyor...")
+        self.lbl_status.setStyleSheet(f"color: {config.COLOR_TEXT_DIM}; margin-left: 10px;")
         top_layout.addWidget(self.lbl_status)
+
         top_layout.addStretch()
-        self.btn_update = QPushButton("⟳")
-        self.btn_update.setFixedWidth(35)
-        self.btn_update.setToolTip("Güncelleme Kontrolü")
-        self.btn_update.setStyleSheet("background-color: #333; border: 1px solid #555; font-size: 16px;")
-        self.btn_update.clicked.connect(self.check_updates)
-        top_layout.addWidget(self.btn_update)
+
+        # Mobil Mod Butonu
+        self.btn_mobile = QPushButton("📱 Mobil Bağlantı")
+        self.btn_mobile.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_mobile.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {config.COLOR_PANEL};
+                border: 1px solid {config.COLOR_BORDER};
+                color: {config.COLOR_TEXT};
+                font-size: 12px;
+                padding: 6px 12px;
+                margin-right: 10px;
+            }}
+            QPushButton:hover {{
+                border: 1px solid {config.COLOR_ACCENT};
+                color: {config.COLOR_ACCENT};
+            }}
+        """)
+        self.btn_mobile.clicked.connect(self.open_mobile_connect)
+        top_layout.addWidget(self.btn_mobile)
+
         self.tts_checkbox = QCheckBox("Sesli Yanıt")
+        self.tts_checkbox.setCursor(Qt.CursorShape.PointingHandCursor)
         self.tts_checkbox.setChecked(True)
         self.tts_checkbox.stateChanged.connect(lambda s: setattr(self, 'tts_enabled', s == 2))
         top_layout.addWidget(self.tts_checkbox)
-        self.btn_load = QPushButton("PDF YÜKLE")
-        self.btn_load.setFixedWidth(110)
-        self.btn_load.setStyleSheet(f"background-color: {config.COLOR_ACCENT}; border: 2px solid {config.COLOR_ACCENT}; border-radius: 6px;")
+
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.VLine)
+        line.setStyleSheet(f"color: {config.COLOR_BORDER};")
+        top_layout.addWidget(line)
+
+        self.btn_update = QPushButton("Güncelle")
+        self.btn_update.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_update.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                border: 1px solid {config.COLOR_BORDER};
+                color: {config.COLOR_TEXT_DIM};
+                font-size: 12px;
+                padding: 6px 12px;
+            }}
+            QPushButton:hover {{
+                border: 1px solid {config.COLOR_TEXT_DIM};
+                color: {config.COLOR_TEXT};
+            }}
+        """)
+        self.btn_update.clicked.connect(self.check_updates)
+        top_layout.addWidget(self.btn_update)
+
+        self.btn_load = QPushButton("+ PDF Yükle")
+        self.btn_load.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_load.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {config.COLOR_PANEL};
+                border: 1px solid {config.COLOR_ACCENT};
+                color: {config.COLOR_ACCENT};
+                font-weight: 600;
+                padding: 6px 15px;
+            }}
+            QPushButton:hover {{
+                background-color: {config.COLOR_ACCENT};
+                color: white;
+            }}
+            QPushButton:disabled {{
+                border: 1px solid {config.COLOR_BORDER};
+                color: {config.COLOR_TEXT_DIM};
+                background-color: transparent;
+            }}
+        """)
         self.btn_load.clicked.connect(self.select_pdf)
         self.btn_load.setEnabled(False)
         top_layout.addWidget(self.btn_load)
+
         main_layout.addWidget(top_panel)
 
+        # --- Progress Bar ---
         self.progress = QProgressBar()
         self.progress.setValue(0)
         self.progress.setTextVisible(False)
         main_layout.addWidget(self.progress)
 
+        # --- Content Area ---
+        content_area = QWidget()
+        content_layout = QVBoxLayout(content_area)
+        content_layout.setContentsMargins(0, 0, 0, 0)
+
         self.thinking_viz = ThinkingVisualizer()
         self.thinking_viz.setVisible(False)
-        main_layout.addWidget(self.thinking_viz)
+        content_layout.addWidget(self.thinking_viz)
 
         self.audio_viz = SpeakingVisualizer()
         self.audio_viz.setVisible(False)
-        main_layout.addWidget(self.audio_viz)
+        content_layout.addWidget(self.audio_viz)
 
         self.chat_area = QTextEdit()
         self.chat_area.setReadOnly(True)
-        main_layout.addWidget(self.chat_area)
+        self.chat_area.setFrameShape(QFrame.Shape.NoFrame)
+        content_layout.addWidget(self.chat_area)
 
+        main_layout.addWidget(content_area)
+
+        # --- Bottom Input Area ---
         bottom_panel = QFrame()
         bottom_layout = QHBoxLayout(bottom_panel)
-        bottom_panel.setStyleSheet(f"background-color: {config.COLOR_PANEL}; padding: 12px;")
+        bottom_panel.setStyleSheet(f"background-color: {config.COLOR_PANEL}; padding: 15px; border-top: 1px solid {config.COLOR_BORDER};")
+
         self.input_field = QLineEdit()
-        self.input_field.setPlaceholderText("Sorunuzu yazın...")
+        self.input_field.setPlaceholderText("Bir soru sorun...")
         self.input_field.returnPressed.connect(self.send_query)
         bottom_layout.addWidget(self.input_field)
+
         self.btn_stop = QPushButton("DURDUR")
+        self.btn_stop.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_stop.setFixedWidth(100)
-        self.btn_stop.setStyleSheet("background-color: #FF5722; border: 2px solid #FF5722;")
+        self.btn_stop.setStyleSheet(f"background-color: {config.COLOR_ERROR}; border: none;")
         self.btn_stop.clicked.connect(self.stop_speaking)
         self.btn_stop.setVisible(False)
         bottom_layout.addWidget(self.btn_stop)
+
         self.btn_send = QPushButton("GÖNDER")
+        self.btn_send.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_send.setFixedWidth(100)
         self.btn_send.clicked.connect(self.send_query)
         bottom_layout.addWidget(self.btn_send)
+
         main_layout.addWidget(bottom_panel)
 
     def init_system(self):
-        self.lbl_status.setText("AI Yükleniyor...")
+        self.lbl_status.setText("Yükleniyor...")
         QApplication.processEvents()
         try:
             self.rag_system = RAGSystem()
             self.lbl_status.setText("Hazır")
             self.btn_load.setEnabled(True)
-            self.add_log("SİSTEM", "RAG aktif. PDF yükleyin.")
+            self.add_log("SİSTEM", "Neural Core aktif. Sohbet etmek için bir PDF belgesi yükleyin.")
         except Exception as e:
-            self.lbl_status.setText("Hata")
-            self.add_log("HATA", str(e))
+            self.lbl_status.setText("Başlatma Hatası")
+            self.add_log("HATA", f"Sistem başlatılamadı: {str(e)}")
 
     def add_log(self, sender, message):
-        color = "#888888"
+        color = config.COLOR_TEXT_DIM
+        bg_color = "transparent"
+        align = "left"
+        padding = "0px"
+        border_radius = "0px"
+
         if sender == "SEN":
             color = config.COLOR_USER_MSG
+            align = "right"
+            # User messages could be styled differently if desired
         elif sender == "ASİSTAN":
             color = config.COLOR_AI_MSG
         elif sender == "HATA":
             color = config.COLOR_ERROR
-        html = f"<div style='margin-bottom: 12px;'><b style='color: {color};'>{sender}:</b><br><span style='color: #E0E0E0;'>{message}</span></div>"
+
+        # Simple timestamp could be added here
+
+        html = f"""
+            <div style='margin-bottom: 20px; text-align: {align};'>
+                <b style='color: {color}; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px;'>{sender}</b><br>
+                <div style='color: {config.COLOR_TEXT}; margin-top: 5px; line-height: 1.5;'>{message}</div>
+            </div>
+        """
         self.chat_area.append(html)
         sb = self.chat_area.verticalScrollBar()
         sb.setValue(sb.maximum())
@@ -254,9 +478,14 @@ class MainWindow(QMainWindow):
     def select_pdf(self):
         fname, _ = QFileDialog.getOpenFileName(self, "PDF Seç", "", "PDF Files (*.pdf)")
         if fname:
-            self.lbl_status.setText(f"İşleniyor: {os.path.basename(fname)}")
+            self.lbl_status.setText(f"İşleniyor...")
             self.btn_load.setEnabled(False)
             self.btn_send.setEnabled(False)
+            self.input_field.setEnabled(False)
+
+            # Show processing message
+            self.add_log("SİSTEM", f"'{os.path.basename(fname)}' analizi başlatıldı, lütfen bekleyin...")
+
             self.loader_thread = LoadPDFWorker(self.rag_system, fname)
             self.loader_thread.progress.connect(self.progress.setValue)
             self.loader_thread.finished.connect(self.on_pdf_loaded)
@@ -265,11 +494,13 @@ class MainWindow(QMainWindow):
 
     def on_pdf_loaded(self, chunk_count):
         self.progress.setValue(100)
-        self.lbl_status.setText("PDF Hazır")
+        self.lbl_status.setText("Hazır")
         self.btn_load.setEnabled(True)
         self.btn_send.setEnabled(True)
-        self.add_log("SİSTEM", f"PDF yüklendi. {chunk_count} parça.")
-        QTimer.singleShot(2000, lambda: self.progress.setValue(0))
+        self.input_field.setEnabled(True)
+        self.input_field.setFocus()
+        self.add_log("SİSTEM", f"Analiz tamamlandı. {chunk_count} veri parçası belleğe alındı.")
+        QTimer.singleShot(1500, lambda: self.progress.setValue(0))
 
     def send_query(self):
         text = self.input_field.text().strip()
@@ -282,7 +513,7 @@ class MainWindow(QMainWindow):
     def start_thinking_mode(self, question, mode="rag"):
         self.input_field.setEnabled(False)
         self.btn_send.setEnabled(False)
-        self.btn_send.setText("DÜŞÜNÜYOR...")
+        self.btn_send.setText("...")
         self.audio_viz.setVisible(False)
         self.thinking_viz.setVisible(True)
         self.thinking_viz.start_animation()
@@ -296,13 +527,13 @@ class MainWindow(QMainWindow):
             dialog = StyledMessageBox(
                 self, 
                 "Bilgi Bulunamadı",
-                "PDF içinde bu bilgi bulunamadı.\n\nGenel bilgi havuzundan araştırılsın mı?"
+                "PDF içinde bu konuyla ilgili net bir bilgi bulamadım.\n\nGenel bilgi tabanını kullanarak cevap vermemi ister misiniz?"
             )
             if dialog.exec() == QDialog.DialogCode.Accepted:
                 self.start_thinking_mode(original_question, mode="general")
                 return
             else:
-                self.add_log("SİSTEM", "Arama iptal edildi.")
+                self.add_log("SİSTEM", "İşlem iptal edildi.")
                 self.reset_ui()
         else:
             self.add_log("ASİSTAN", result)
@@ -315,7 +546,6 @@ class MainWindow(QMainWindow):
 
     def start_tts(self, text):
         self.lbl_status.setText("Ses oluşturuluyor...")
-        self.btn_send.setText("SES...")
         self.tts_worker = TTSWorker(text)
         self.tts_worker.finished.connect(self.play_audio)
         self.tts_worker.error.connect(self.on_tts_error)
@@ -323,7 +553,7 @@ class MainWindow(QMainWindow):
 
     def play_audio(self, file_path):
         self.current_audio_file = file_path
-        self.lbl_status.setText("Konuşuyor...")
+        self.lbl_status.setText("Yanıtlanıyor...")
         self.thinking_viz.setVisible(False)
         self.audio_viz.set_audio_data(file_path)
         self.audio_viz.setVisible(True)
@@ -342,7 +572,7 @@ class MainWindow(QMainWindow):
             self.audio_viz.setVisible(False)
             self.btn_stop.setVisible(False)
             self.btn_send.setVisible(True)
-            self.lbl_status.setText("PDF Hazır")
+            self.lbl_status.setText("Hazır")
             self.reset_ui()
             if self.current_audio_file and os.path.exists(self.current_audio_file):
                 try:
@@ -352,7 +582,7 @@ class MainWindow(QMainWindow):
                 self.current_audio_file = None
 
     def on_tts_error(self, error):
-        self.add_log("HATA", f"TTS: {error}")
+        self.add_log("HATA", f"Ses motoru hatası: {error}")
         self.thinking_viz.stop_animation()
         self.thinking_viz.setVisible(False)
         self.audio_viz.stop()
@@ -365,23 +595,46 @@ class MainWindow(QMainWindow):
         self.btn_stop.setVisible(False)
         self.btn_send.setText("GÖNDER")
         self.input_field.setFocus()
+        self.lbl_status.setText("Hazır")
 
     def check_updates(self):
         self.update_checker = check_for_updates(self, GITHUB_REPO, silent=False)
 
+    def open_mobile_connect(self):
+        """Mobil bağlantı için web arayüzünü başlatır ve IP'yi gösterir."""
+        if launch_web_ui():
+            dialog = WebConnectDialog(self)
+            dialog.exec()
+
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    font = QFont("Segoe UI", 10)
-    app.setFont(font)
-    if not config.API_KEY:
-        dialog = ApiKeyDialog()
-        if dialog.exec() != QDialog.DialogCode.Accepted:
-            sys.exit(0)
+    # Windows'ta multiprocessing için gerekli
+    import multiprocessing
+    multiprocessing.freeze_support()
+
+    # Eğer Android platformu tespit edilirse veya --mobile parametresi varsa doğrudan web arayüzünü aç
+    if is_android() or "--mobile" in sys.argv:
+        launch_web_ui()
+        # Eğer bu bir sub-process değilse bekleme yapmamız gerekebilir
+        # Ancak launch_web_ui ayrı bir process başlattığı için burada döngüye girmek gerekebilir.
+        # Basitçe çıkış yapmamalıyız.
+        try:
+             import time
+             while True: time.sleep(1)
+        except KeyboardInterrupt:
+             sys.exit()
     else:
-        if not config.test_api_key(config.API_KEY):
+        app = QApplication(sys.argv)
+        font = QFont("Segoe UI", 10)
+        app.setFont(font)
+        if not config.API_KEY:
             dialog = ApiKeyDialog()
             if dialog.exec() != QDialog.DialogCode.Accepted:
                 sys.exit(0)
-    window = MainWindow()
-    window.show()
-    sys.exit(app.exec())
+        else:
+            if not config.test_api_key(config.API_KEY):
+                dialog = ApiKeyDialog()
+                if dialog.exec() != QDialog.DialogCode.Accepted:
+                    sys.exit(0)
+        window = MainWindow()
+        window.show()
+        sys.exit(app.exec())

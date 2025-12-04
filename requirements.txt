@@ -17,3 +17,4 @@ mutagen
 python-dotenv
 imageio-ffmpeg
 requests
+streamlit
