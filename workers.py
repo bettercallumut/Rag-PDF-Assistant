@@ -52,10 +52,10 @@ class TTSWorker(QThread):
                 processed_text = processed_text[:4000]
             client = OpenAI(api_key=config.API_KEY)
             response = client.audio.speech.create(
-                model="tts-1",
+                model="tts-1-hd",
                 voice="nova",
                 input=processed_text,
-                speed=1.1,
+                speed=1.2,
                 response_format="mp3"
             )
             temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
