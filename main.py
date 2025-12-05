@@ -14,7 +14,6 @@ from workers import LoadPDFWorker, QueryWorker, TTSWorker
 from visualizer import ThinkingVisualizer
 from audio_visualizer import SpeakingVisualizer
 from dialogs import StyledMessageBox
-from updater import check_for_updates, GITHUB_REPO
 
 class ApiKeyDialog(QDialog):
     def __init__(self, parent=None):
@@ -230,29 +229,6 @@ class MainWindow(QMainWindow):
         self.tts_checkbox.setChecked(True)
         self.tts_checkbox.stateChanged.connect(lambda s: setattr(self, 'tts_enabled', s == 2))
         top_layout.addWidget(self.tts_checkbox)
-
-        line = QFrame()
-        line.setFrameShape(QFrame.Shape.VLine)
-        line.setStyleSheet(f"color: {config.COLOR_BORDER};")
-        top_layout.addWidget(line)
-
-        self.btn_update = QPushButton("Güncelle")
-        self.btn_update.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_update.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                border: 1px solid {config.COLOR_BORDER};
-                color: {config.COLOR_TEXT_DIM};
-                font-size: 12px;
-                padding: 6px 12px;
-            }}
-            QPushButton:hover {{
-                border: 1px solid {config.COLOR_TEXT_DIM};
-                color: {config.COLOR_TEXT};
-            }}
-        """)
-        self.btn_update.clicked.connect(self.check_updates)
-        top_layout.addWidget(self.btn_update)
 
         self.btn_load = QPushButton("+ PDF Yükle")
         self.btn_load.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -493,9 +469,6 @@ class MainWindow(QMainWindow):
         self.btn_send.setText("GÖNDER")
         self.input_field.setFocus()
         self.lbl_status.setText("Hazır")
-
-    def check_updates(self):
-        self.update_checker = check_for_updates(self, GITHUB_REPO, silent=False)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
