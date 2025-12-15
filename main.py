@@ -460,6 +460,7 @@ class MainWindow(QMainWindow):
         self.worker = QueryWorker(self.rag_system, question)
         self.worker.finished.connect(self.on_query_result)
         self.worker.error.connect(lambda e: self.add_log("HATA", e))
+        self.worker.token_received.connect(self.on_token_received)
         
         self.add_log("ASİSTAN", "")
         self.current_message_buffer = ""
@@ -559,11 +560,12 @@ class MainWindow(QMainWindow):
                 self.add_log("SİSTEM", "Sorgu iptal edildi.")
             return
         
-        cursor = self.chat_area.textCursor()
-        cursor.movePosition(cursor.MoveOperation.End)
-        cursor.insertText(result)
-        sb = self.chat_area.verticalScrollBar()
-        sb.setValue(sb.maximum())
+        # Streaming kullanıldığı için sonucun tekrar eklenmesine gerek yok.
+        # cursor = self.chat_area.textCursor()
+        # cursor.movePosition(cursor.MoveOperation.End)
+        # cursor.insertText(result)
+        # sb = self.chat_area.verticalScrollBar()
+        # sb.setValue(sb.maximum())
 
         if self.tts_enabled:
              self.start_tts(result)
@@ -582,6 +584,7 @@ class MainWindow(QMainWindow):
         self.worker = QueryWorker(self.rag_system, self.last_question, mode="general")
         self.worker.finished.connect(self.on_query_result)
         self.worker.error.connect(lambda e: self.add_log("HATA", e))
+        self.worker.token_received.connect(self.on_token_received)
         
         self.add_log("ASİSTAN", "")
         self.current_message_buffer = ""

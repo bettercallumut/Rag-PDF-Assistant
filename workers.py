@@ -1,11 +1,12 @@
+# workers.py
 import tempfile
 import queue
 import os
+import time
+import random
 from PyQt6.QtCore import QThread, pyqtSignal
-from openai import OpenAI
 import config
 from text_processor import process_text_for_tts
-import re
 
 try:
     import pyttsx3
@@ -33,6 +34,7 @@ class LoadPDFWorker(QThread):
 
 class QueryWorker(QThread):
     finished = pyqtSignal(str)
+    token_received = pyqtSignal(str) # YENİ: Streaming için sinyal
     error = pyqtSignal(str)
     
     def __init__(self, rag_system, question, mode="rag"):
@@ -43,11 +45,32 @@ class QueryWorker(QThread):
 
     def run(self):
         try:
+            # Cevabı al
             if self.mode == "rag":
                 res = self.rag.query(self.question, config.API_KEY)
             else:
                 res = self.rag.query_general(self.question, config.API_KEY)
-            self.finished.emit(res)
+
+            # Fallback kontrolü
+            if res == "###ASK_FALLBACK###":
+                self.finished.emit(res)
+                return
+
+            # FAKE STREAMING: Cevabı kelime kelime parçalayıp arayüze gönderiyoruz.
+            # Bu sayede kullanıcı "yazıyormuş" gibi görüyor.
+            words = res.split(" ")
+            accumulated_text = ""
+            
+            for word in words:
+                chunk = word + " "
+                self.token_received.emit(chunk) # Ekrana bas
+                accumulated_text += chunk
+                
+                # Doğal yazma efekti için minik rastgele gecikme
+                time.sleep(random.uniform(0.02, 0.05)) 
+
+            self.finished.emit(accumulated_text)
+            
         except Exception as e:
             self.error.emit(str(e))
 
@@ -59,7 +82,6 @@ class PersistentTTSWorker(QThread):
         super().__init__()
         self.queue = queue.Queue()
         self.running = True
-        self.engine_initialized = False
 
     def speak(self, text):
         self.queue.put(text)
@@ -71,17 +93,18 @@ class PersistentTTSWorker(QThread):
 
     def run(self):
         if not HAS_LOCAL_TTS:
-            self.error.emit("pyttsx3 kütüphanesi yüklü değil.")
+            self.error.emit("pyttsx3 modülü eksik.")
             return
 
         try:
             pythoncom.CoInitialize()
             engine = pyttsx3.init()
             
+            # Türkçe ses bulma
             voices = engine.getProperty('voices')
             turkish_voice = None
             for voice in voices:
-                if "turkish" in voice.name.lower() or "tr" in voice.id.lower() or "tolga" in voice.name.lower():
+                if "tr" in voice.id.lower() or "turkish" in voice.name.lower():
                     turkish_voice = voice.id
                     break
             
@@ -89,27 +112,27 @@ class PersistentTTSWorker(QThread):
                 engine.setProperty('voice', turkish_voice)
             
             engine.setProperty('rate', config.TTS_LOCAL_RATE)
-            self.engine_initialized = True
             
             while self.running:
                 text = self.queue.get()
-                if text is None:
-                    break
+                if text is None: break
                 
                 try:
+                    # Basit temizlik (GPT kullanmadan)
                     from text_processor import basic_text_cleanup
-                    processed_text = basic_text_cleanup(text)
+                    clean_text = basic_text_cleanup(text)
                     
+                    # Geçici dosya oluştur
                     temp_file = tempfile.NamedTemporaryFile(delete=False, suffix=".wav")
                     temp_file.close()
                     
-                    engine.save_to_file(processed_text, temp_file.name)
+                    engine.save_to_file(clean_text, temp_file.name)
                     engine.runAndWait()
                     
                     if os.path.exists(temp_file.name) and os.path.getsize(temp_file.name) > 0:
                         self.finished.emit(temp_file.name)
                     else:
-                        self.error.emit("Audio generation failed")
+                        self.error.emit("Ses dosyası oluşturulamadı.")
                         
                 except Exception as e:
                     self.error.emit(str(e))
@@ -117,7 +140,7 @@ class PersistentTTSWorker(QThread):
                     self.queue.task_done()
                     
         except Exception as e:
-             self.error.emit(f"TTS Init Error: {e}")
+             self.error.emit(f"TTS Başlatma Hatası: {e}")
         finally:
              pythoncom.CoUninitialize()
 

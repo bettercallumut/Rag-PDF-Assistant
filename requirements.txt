@@ -11,5 +11,6 @@ pyttsx3
 imageio-ffmpeg
 numpy
 requests
-sentence-transformers
+
 pypiwin32
+pdfplumber
