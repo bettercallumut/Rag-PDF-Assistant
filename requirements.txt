@@ -1,0 +1,15 @@
+PyQt6
+openai
+langchain
+langchain-community
+langchain-openai
+langchain-huggingface
+langchain-text-splitters
+chromadb
+PyPDF2
+pyttsx3
+imageio-ffmpeg
+numpy
+requests
+sentence-transformers
+pypiwin32
