@@ -1,0 +1,24 @@
+"""
+Token Limiti Bilgilendirmesi
+
+Eğer "API Hatası: rate_limit_exceeded" alırsanız:
+
+1. BÜYÜK PDF'LER İÇİN:
+   - PDF'iniz çok büyük (>50 sayfa)
+   - Sistem otomatik olarak en ilgili sayfaları seçer
+   - Daha spesifik sorular sorun (örn: "5. bölümde..." gibi)
+
+2. API RATE LİMİTİ:
+   - OpenAI hesabınızın dakikalık token limiti: 30,000 TPM
+   - Sistem şu anda 25k token ile sınırlı (güvenli)
+   - Birkaç saniye bekleyip tekrar deneyin
+
+3. ÇÖZÜMLERİ:
+   - Daha kısa sorular sorun
+   - PDF'in sadece ilgili bölümlerini yükleyin
+   - OpenAI hesabınızı tier-2'ye yükseltin (daha yüksek limit)
+
+4. ALTERNATİF:
+   - config.py'de MAX_CONTEXT_TOKENS değerini azaltabilirsiniz
+   - Örnek: 25000 → 15000 (daha küçük PDF'ler için)
+"""
