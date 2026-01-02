@@ -11,7 +11,7 @@
 
 ---
 
-### [�� **Türkçe**](#turkish) | [�� **English**](#english)
+### [🇹🇷 **Türkçe**](#turkish) | [🇬🇧 **English**](#english)
 
 ---
 
@@ -19,7 +19,7 @@
 
 <a id="turkish"></a>
 
-## �� Türkçe
+## 🇹🇷 Türkçe
 
 ### 📖 Genel Bakış
 
@@ -227,7 +227,7 @@ Bu proje **MIT Lisansı** altında lisanslanmıştır. Detaylar için [LICENSE](
 
 <a id="english"></a>
 
-## �� English
+## 🇬🇧 English
 
 ### 📖 Overview
 
