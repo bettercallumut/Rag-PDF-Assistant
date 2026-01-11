@@ -1,0 +1,15 @@
+python3
+kivy==2.2.0
+openai<1.0
+langchain
+langchain-core
+langchain-community
+langchain-openai
+langchain-text-splitters
+PyPDF2
+requests
+python-dotenv
+pyjnius
+plyer
+gtts
+android
